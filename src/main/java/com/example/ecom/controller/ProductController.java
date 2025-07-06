@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -28,6 +29,7 @@ public class ProductController {
         this.productService = productService;
     }
 
+    //! Get all products
     @Operation(summary = "Get all products", description = "Fetches a list of all products available in the store.")
     @ApiResponses(
             value = {
@@ -42,6 +44,7 @@ public class ProductController {
         return new ResponseEntity<>(productService.getAllProducts(), HttpStatus.OK);
     }
 
+    //! Get product by ID
     @Operation(summary = "Get product by ID", description = "Fetches a product by its unique ID.")
     @ApiResponses(
             value = {
@@ -62,6 +65,7 @@ public class ProductController {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
+    //! Create a new product
     @Operation(summary = "Create a new product", description = "Adds a new product to the store with an image.")
     @ApiResponses(
             value = {
@@ -73,8 +77,10 @@ public class ProductController {
             }
     )
     @PostMapping("/product/create")
-    public ResponseEntity<?> addProduct(@RequestPart Product product,
-                                        @RequestPart MultipartFile imageFile) {
+    public ResponseEntity<?> addProduct(
+            @RequestPart Product product,
+            @RequestPart MultipartFile imageFile
+    ) {
         try {
             Product newProduct = productService.addProduct(product, imageFile);
             return new ResponseEntity<>(newProduct, HttpStatus.CREATED);
@@ -83,6 +89,17 @@ public class ProductController {
         }
     }
 
+    @Operation(summary = "Get product image by ID", description = "Fetches the image of a product by its unique ID.")
+    @ApiResponses(
+            value = {
+                    @ApiResponse(
+                            responseCode = "200", description = "Successfully retrieved product image",
+                            content = @Content(mediaType = "image/jpeg")
+                    ),
+                    @ApiResponse(responseCode = "404", description = "Product not found")
+            }
+    )
+    //! Get product image by ID
     @GetMapping("/product/{productId}/image")
     public ResponseEntity<byte[]> getProductImage(@PathVariable int productId) {
         Product product = productService.getProduct(productId);
@@ -92,4 +109,34 @@ public class ProductController {
                 .contentType(MediaType.valueOf(product.getImageType()))
                 .body(imageFile);
     }
+
+    //! Update product
+    @Operation(summary = "Update product", description = "Updates an existing product's details.")
+    @ApiResponses(
+            value = {
+                    @ApiResponse(responseCode = "200", description = "Product updated successfully"),
+                    @ApiResponse(responseCode = "404", description = "Product not found"),
+                    @ApiResponse(responseCode = "400", description = "Bad request")
+            }
+    )
+    @PutMapping("/product/{id}/update")
+    public ResponseEntity<String> updateProduct(
+            @PathVariable int id,
+            @RequestPart Product product,
+            @RequestPart MultipartFile imageFile
+    ) {
+        Product updatedProduct = null;
+        try {
+            updatedProduct = productService.updateProduct(id, product, imageFile);
+        } catch (IOException e) {
+            return new ResponseEntity<>("Error updating product: " + e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+        if (updatedProduct != null) {
+            return new ResponseEntity<>("Product updated successfully", HttpStatus.OK);
+        } else {
+            return new ResponseEntity<>("Product not found", HttpStatus.NOT_FOUND);
+        }
+    }
+
+    //! Delete product
 }
