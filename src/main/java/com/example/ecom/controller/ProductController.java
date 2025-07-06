@@ -156,4 +156,25 @@ public class ProductController {
             return new ResponseEntity<>("Product not found", HttpStatus.NOT_FOUND);
         }
     }
+
+    //! Search by keyword
+    @Operation(summary = "Search products", description = "Searches for products based on a keyword.")
+    @ApiResponses(
+            value = {
+                    @ApiResponse(
+                            responseCode = "200", description = "Successfully retrieved list of products",
+                            content = @Content(schema = @Schema(implementation = Product.class))
+                    ),
+                    @ApiResponse(responseCode = "404", description = "No products found")
+            }
+    )
+    @GetMapping("/products/search")
+    public ResponseEntity<List<Product>> searchProducts(@RequestParam String keyword) {
+        System.out.println("Searching for products with keyword: " + keyword);
+        List<Product> products = productService.searchProducts(keyword);
+        if (products.isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        return new ResponseEntity<>(products, HttpStatus.OK);
+    }
 }
