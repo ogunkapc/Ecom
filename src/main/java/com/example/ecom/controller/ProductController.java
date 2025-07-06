@@ -139,4 +139,21 @@ public class ProductController {
     }
 
     //! Delete product
+    @Operation(summary = "Delete product", description = "Deletes a product by its unique ID.")
+    @ApiResponses(
+            value = {
+                    @ApiResponse(responseCode = "200", description = "Product deleted successfully"),
+                    @ApiResponse(responseCode = "404", description = "Product not found")
+            }
+    )
+    @DeleteMapping("/product/{id}/delete")
+    public ResponseEntity<String> deleteProduct(@PathVariable int id) {
+        Product product = productService.getProduct(id);
+        if (product != null) {
+            productService.deleteProduct(id);
+            return new ResponseEntity<>("Product deleted successfully", HttpStatus.OK);
+        } else {
+            return new ResponseEntity<>("Product not found", HttpStatus.NOT_FOUND);
+        }
+    }
 }
