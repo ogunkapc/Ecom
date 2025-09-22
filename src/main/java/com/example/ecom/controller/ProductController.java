@@ -1,7 +1,11 @@
 package com.example.ecom.controller;
 
+import com.example.ecom.dto.ProductRequestDto;
+import com.example.ecom.dto.ProductResponseDto;
+import com.example.ecom.mapper.ProductMapper;
 import com.example.ecom.model.Product;
 import com.example.ecom.service.ProductService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -19,14 +23,16 @@ import java.util.List;
 
 @RestController
 @CrossOrigin
-@RequestMapping("/api")
+@RequestMapping("/api/products")
 @Tag(name = "Products")
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductMapper productMapper;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, ProductMapper productMapper) {
         this.productService = productService;
+        this.productMapper = productMapper;
     }
 
     //! Get all products
@@ -35,12 +41,15 @@ public class ProductController {
             value = {
                     @ApiResponse(
                             responseCode = "200", description = "Successfully retrieved list of products",
-                            content = @Content(schema = @Schema(implementation = Product.class))
+                            content = @Content(
+                                    mediaType =  MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ProductResponseDto.class)
+                            )
                     )
             }
     )
-    @GetMapping("/products")
-    public ResponseEntity<List<Product>> getAllProducts() {
+    @GetMapping
+    public ResponseEntity<List<ProductResponseDto>> getAllProducts() {
         return new ResponseEntity<>(productService.getAllProducts(), HttpStatus.OK);
     }
 
@@ -55,9 +64,9 @@ public class ProductController {
                     @ApiResponse(responseCode = "404", description = "Product not found")
             }
     )
-    @GetMapping("/product/{id}")
-    public ResponseEntity<Product> getProduct(@PathVariable int id) {
-        Product product = productService.getProduct(id);
+    @GetMapping("/{productId}")
+    public ResponseEntity<ProductResponseDto> getProduct(@PathVariable int productId) {
+        ProductResponseDto product = productService.getProduct(productId);
 
         if (product != null)
             return new ResponseEntity<>(product, HttpStatus.OK);
@@ -76,39 +85,42 @@ public class ProductController {
                     @ApiResponse(responseCode = "500", description = "Internal server error")
             }
     )
-    @PostMapping("/product/create")
+    @PostMapping("/create")
     public ResponseEntity<?> addProduct(
-            @RequestPart Product product,
+            @RequestPart String productJson,
             @RequestPart MultipartFile imageFile
     ) {
         try {
-            Product newProduct = productService.addProduct(product, imageFile);
-            return new ResponseEntity<>(newProduct, HttpStatus.CREATED);
+            ObjectMapper objectMapper = new ObjectMapper();
+            ProductRequestDto productRequestDto = objectMapper.readValue(productJson, ProductRequestDto.class);
+
+            Product newProduct = productService.addProduct(productRequestDto, imageFile);
+            return new ResponseEntity<>(productMapper.toDto(newProduct), HttpStatus.CREATED);
         } catch (Exception e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    @Operation(summary = "Get product image by ID", description = "Fetches the image of a product by its unique ID.")
-    @ApiResponses(
-            value = {
-                    @ApiResponse(
-                            responseCode = "200", description = "Successfully retrieved product image",
-                            content = @Content(mediaType = "image/jpeg")
-                    ),
-                    @ApiResponse(responseCode = "404", description = "Product not found")
-            }
-    )
+//    @Operation(summary = "Get product image by ID", description = "Fetches the image of a product by its unique ID.")
+//    @ApiResponses(
+//            value = {
+//                    @ApiResponse(
+//                            responseCode = "200", description = "Successfully retrieved product image",
+//                            content = @Content(mediaType = "image/jpeg")
+//                    ),
+//                    @ApiResponse(responseCode = "404", description = "Product not found")
+//            }
+//    )
     //! Get product image by ID
-    @GetMapping("/product/{productId}/image")
-    public ResponseEntity<byte[]> getProductImage(@PathVariable int productId) {
-        Product product = productService.getProduct(productId);
-        byte[] imageFile = product.getImageData();
-
-        return ResponseEntity.ok()
-                .contentType(MediaType.valueOf(product.getImageType()))
-                .body(imageFile);
-    }
+//    @GetMapping("/{productId}/image")
+//    public ResponseEntity<byte[]> getProductImage(@PathVariable int productId) {
+//        ProductResponseDto product = productService.getProduct(productId);
+//        byte[] imageFile = product.getImageData();
+//
+//        return ResponseEntity.ok()
+//                .contentType(MediaType.valueOf(product.getImageType()))
+//                .body(imageFile);
+//    }
 
     //! Update product
     @Operation(summary = "Update product", description = "Updates an existing product's details.")
@@ -119,12 +131,14 @@ public class ProductController {
                     @ApiResponse(responseCode = "400", description = "Bad request")
             }
     )
-    @PutMapping("/product/{id}/update")
+    @PutMapping("/{id}/update")
     public ResponseEntity<String> updateProduct(
             @PathVariable int id,
             @RequestPart Product product,
             @RequestPart MultipartFile imageFile
     ) {
+        ProductResponseDto existingProduct = productService.getProduct(id);
+
         Product updatedProduct = null;
         try {
             updatedProduct = productService.updateProduct(id, product, imageFile);
@@ -146,9 +160,9 @@ public class ProductController {
                     @ApiResponse(responseCode = "404", description = "Product not found")
             }
     )
-    @DeleteMapping("/product/{id}/delete")
+    @DeleteMapping("/{id}/delete")
     public ResponseEntity<String> deleteProduct(@PathVariable int id) {
-        Product product = productService.getProduct(id);
+        ProductResponseDto product = productService.getProduct(id);
         if (product != null) {
             productService.deleteProduct(id);
             return new ResponseEntity<>("Product deleted successfully", HttpStatus.OK);
@@ -168,13 +182,15 @@ public class ProductController {
                     @ApiResponse(responseCode = "404", description = "No products found")
             }
     )
-    @GetMapping("/products/search")
-    public ResponseEntity<List<Product>> searchProducts(@RequestParam String keyword) {
+    @GetMapping("/search")
+    public ResponseEntity<List<ProductResponseDto>> searchProducts(@RequestParam String keyword) {
         System.out.println("Searching for products with keyword: " + keyword);
-        List<Product> products = productService.searchProducts(keyword);
-        if (products.isEmpty()) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-        return new ResponseEntity<>(products, HttpStatus.OK);
+        List<ProductResponseDto> products = productService.searchProducts(keyword)
+                .stream()
+                .map(productMapper::toDto)
+                .toList();
+        return products.isEmpty()
+            ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
+            : new ResponseEntity<>(products, HttpStatus.OK);
     }
 }
