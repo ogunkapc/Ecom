@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -132,23 +133,23 @@ public class ProductController {
             }
     )
     @PutMapping("/{id}/update")
-    public ResponseEntity<String> updateProduct(
+    public ResponseEntity<?> updateProduct(
             @PathVariable int id,
-            @RequestPart Product product,
+            @RequestPart String productJson,
             @RequestPart MultipartFile imageFile
     ) {
-        ProductResponseDto existingProduct = productService.getProduct(id);
-
-        Product updatedProduct = null;
         try {
-            updatedProduct = productService.updateProduct(id, product, imageFile);
+            ObjectMapper objectMapper = new ObjectMapper();
+            ProductRequestDto productRequestDto = objectMapper.readValue(productJson, ProductRequestDto.class);
+
+            Product updatedProduct = productService.addProduct(productRequestDto, imageFile);
+            return new ResponseEntity<>(productMapper.toDto(updatedProduct), HttpStatus.OK);
         } catch (IOException e) {
             return new ResponseEntity<>("Error updating product: " + e.getMessage(), HttpStatus.BAD_REQUEST);
-        }
-        if (updatedProduct != null) {
-            return new ResponseEntity<>("Product updated successfully", HttpStatus.OK);
-        } else {
+        } catch (EntityNotFoundException e) {
             return new ResponseEntity<>("Product not found", HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
