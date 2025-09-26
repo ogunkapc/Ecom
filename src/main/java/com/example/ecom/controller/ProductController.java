@@ -5,21 +5,21 @@ import com.example.ecom.dto.ProductResponseDto;
 import com.example.ecom.mapper.ProductMapper;
 import com.example.ecom.model.Product;
 import com.example.ecom.service.ProductService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -60,7 +60,7 @@ public class ProductController {
             value = {
                     @ApiResponse(
                             responseCode = "200", description = "Successfully retrieved product",
-                            content = @Content(schema = @Schema(implementation = Product.class))
+                            content = @Content(schema = @Schema(implementation = ProductResponseDto.class))
                     ),
                     @ApiResponse(responseCode = "404", description = "Product not found")
             }
@@ -69,10 +69,7 @@ public class ProductController {
     public ResponseEntity<ProductResponseDto> getProduct(@PathVariable int productId) {
         ProductResponseDto product = productService.getProduct(productId);
 
-        if (product != null)
-            return new ResponseEntity<>(product, HttpStatus.OK);
-        else
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        return new ResponseEntity<>(product, HttpStatus.OK);
     }
 
     //! Create a new product
@@ -81,15 +78,26 @@ public class ProductController {
             value = {
                     @ApiResponse(
                             responseCode = "201", description = "Product created successfully",
-                            content = @Content(schema = @Schema(implementation = Product.class))
+                            content = @Content(schema = @Schema(implementation = ProductResponseDto.class))
                     ),
                     @ApiResponse(responseCode = "500", description = "Internal server error")
             }
     )
-    @PostMapping("/create")
-    public ResponseEntity<?> addProduct(
-            @RequestPart String productJson,
-            @RequestPart MultipartFile imageFile
+    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProductResponseDto> addProduct(
+            @Parameter(description = "Product JSON as string")
+            @RequestPart("product") String productJson,
+//            @Parameter(
+//                    description = "Product JSON",
+//                    content = @Content(
+//                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+//                            schema = @Schema(implementation = ProductRequestDto.class)
+//                    )
+//            )
+//            @RequestPart("product") ProductRequestDto productRequestDto,
+
+            @Parameter(description = "Image file")
+            @RequestPart("imageFile") MultipartFile imageFile
     ) {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
@@ -97,31 +105,10 @@ public class ProductController {
 
             Product newProduct = productService.addProduct(productRequestDto, imageFile);
             return new ResponseEntity<>(productMapper.toDto(newProduct), HttpStatus.CREATED);
-        } catch (Exception e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Error parsing product JSON: " + e.getMessage());
         }
     }
-
-//    @Operation(summary = "Get product image by ID", description = "Fetches the image of a product by its unique ID.")
-//    @ApiResponses(
-//            value = {
-//                    @ApiResponse(
-//                            responseCode = "200", description = "Successfully retrieved product image",
-//                            content = @Content(mediaType = "image/jpeg")
-//                    ),
-//                    @ApiResponse(responseCode = "404", description = "Product not found")
-//            }
-//    )
-    //! Get product image by ID
-//    @GetMapping("/{productId}/image")
-//    public ResponseEntity<byte[]> getProductImage(@PathVariable int productId) {
-//        ProductResponseDto product = productService.getProduct(productId);
-//        byte[] imageFile = product.getImageData();
-//
-//        return ResponseEntity.ok()
-//                .contentType(MediaType.valueOf(product.getImageType()))
-//                .body(imageFile);
-//    }
 
     //! Update product
     @Operation(summary = "Update product", description = "Updates an existing product's details.")
@@ -132,25 +119,24 @@ public class ProductController {
                     @ApiResponse(responseCode = "400", description = "Bad request")
             }
     )
-    @PutMapping("/{id}/update")
-    public ResponseEntity<?> updateProduct(
+    @PutMapping(value = "/{id}/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProductResponseDto> updateProduct(
             @PathVariable int id,
-            @RequestPart String productJson,
-            @RequestPart MultipartFile imageFile
-    ) {
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            ProductRequestDto productRequestDto = objectMapper.readValue(productJson, ProductRequestDto.class);
 
-            Product updatedProduct = productService.addProduct(productRequestDto, imageFile);
-            return new ResponseEntity<>(productMapper.toDto(updatedProduct), HttpStatus.OK);
-        } catch (IOException e) {
-            return new ResponseEntity<>("Error updating product: " + e.getMessage(), HttpStatus.BAD_REQUEST);
-        } catch (EntityNotFoundException e) {
-            return new ResponseEntity<>("Product not found", HttpStatus.NOT_FOUND);
-        } catch (Exception e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+            @Parameter(
+                    description = "Product JSON",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProductRequestDto.class)
+                    )
+            )
+            @RequestPart("product") ProductRequestDto productRequestDto,
+
+            @Parameter(description = "Image file (optional)")
+            @RequestPart(value = "imageFile", required = false) MultipartFile imageFile
+    ) {
+        Product updatedProduct = productService.updateProduct(id, productRequestDto, imageFile);
+        return new ResponseEntity<>(productMapper.toDto(updatedProduct), HttpStatus.OK);
     }
 
     //! Delete product
@@ -163,13 +149,8 @@ public class ProductController {
     )
     @DeleteMapping("/{id}/delete")
     public ResponseEntity<String> deleteProduct(@PathVariable int id) {
-        ProductResponseDto product = productService.getProduct(id);
-        if (product != null) {
-            productService.deleteProduct(id);
-            return new ResponseEntity<>("Product deleted successfully", HttpStatus.OK);
-        } else {
-            return new ResponseEntity<>("Product not found", HttpStatus.NOT_FOUND);
-        }
+        productService.deleteProduct(id);
+        return new ResponseEntity<>("Product deleted successfully", HttpStatus.OK);
     }
 
     //! Search by keyword
@@ -185,13 +166,9 @@ public class ProductController {
     )
     @GetMapping("/search")
     public ResponseEntity<List<ProductResponseDto>> searchProducts(@RequestParam String keyword) {
-        System.out.println("Searching for products with keyword: " + keyword);
-        List<ProductResponseDto> products = productService.searchProducts(keyword)
-                .stream()
-                .map(productMapper::toDto)
-                .toList();
+        List<ProductResponseDto> products = productService.searchProducts(keyword);
         return products.isEmpty()
-            ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
+            ? new ResponseEntity<>(HttpStatus.NO_CONTENT)
             : new ResponseEntity<>(products, HttpStatus.OK);
     }
 }
